@@ -6,24 +6,13 @@ class CommandHelper {
     public function showHelp() {
         echo '
 Данная команда используется следующим образом
+Для просмотра списка команд:
+    php app.php
 Для создания новой команды:
     php app.php command_name {verbose,overwrite} [log_file=app.log] {unlimited} [methods={create,update,delete}] [paginate=50] {log}
-Для заполнения описания команды
-    php app.php command_name {help} описание команды
 Для просмотра описания команды
     php app.php command_name {help}
 	';
-    }
-    public function showCommandHelp($commandName) {
-        # на всякий случай берём basename, чтобы в командах не пытались сохранить информацию в других директория
-        $file = $this->path.basename($commandName).'.json';
-        if (!file_exists(($file))) {
-            echo 'Такой команды не существует';
-            return;
-        }
-        $json = json_decode(file_get_contents(($file)), true);
-        if (isset($json['desc']) && !empty($json['desc'])) echo $json['desc'];
-        else echo 'Описание отсутствует';
     }
     public function showCommandParams($commandName) {
         # на всякий случай берём basename, чтобы в командах не пытались сохранить информацию в других директория
@@ -54,11 +43,6 @@ class CommandHelper {
             }
         }
     }
-    public function createCommandDesc($commandName, $params) {
-        array_shift($params);
-        $desc = implode(' ', $params);
-        $this->saveCommand($commandName, ['desc'=>$desc]);
-    }
     public function createCommand($commandName, $params) {
         $allArguments = [];
         $allOptions = [];
@@ -82,9 +66,9 @@ class CommandHelper {
         $this->saveCommand($commandName, ['options'=>$allOptions,'arguments'=>$allArguments]);
     }
     private function saveCommand($commandName, $params) {
-        $path = 'commands'.DIRECTORY_SEPARATOR;
+        if (!is_dir($this->path)) mkdir($this->path);
         # на всякий случай берём basename, чтобы в командах не пытались сохранить информацию в других директория
-        $file = $path.basename($commandName).'.json';
+        $file = $this->path.basename($commandName).'.json';
         if (file_exists($file)) {
             $json = json_decode(file_get_contents($file), true);
             if (!is_array($json)) $json = [];
@@ -93,13 +77,29 @@ class CommandHelper {
         else $json = json_encode($params);
 
         file_put_contents($file, $json);
-        if (isset($json['options']) || isset($json['arguments'])) $this->showJsonParams($commandName, $json);
+        $this->showJsonParams($commandName, json_decode($json, true));
+    }
+    public function showCommandList() {
+        if (!is_dir($this->path)) {
+            echo "Список команд пуст. Создайте команды. Например
+    php app.php command_name {verbose,overwrite} [log_file=app.log] {unlimited} [methods={create,update,delete}] [paginate=50] {log}";
+        }
+        else {
+            $commandList = glob($this->path.'*.json');
+            if (empty($commandList)) {
+                echo "Список команд пуст. Создайте команды. Например
+    php app.php command_name {verbose,overwrite} [log_file=app.log] {unlimited} [methods={create,update,delete}] [paginate=50] {log}";
+            }
+            foreach ($commandList as $commandFile) {
+                $this->showCommandParams(pathinfo($commandFile, PATHINFO_FILENAME));
+            }
+        }
     }
 }
 $commandHelper = new CommandHelper();
 
-if ($argc == 2 && $argv[1] == '{help}') {
-    $commandHelper->showHelp();
+if ($argc == 1) {
+    $commandHelper->showCommandList();
 	return;
 }
 
@@ -107,12 +107,8 @@ $params = $argv;
 array_shift($params);
 $commandName = array_shift($params);
 
-if ($argc == 3 && $argv[2] == '{help}') {
-    $commandHelper->showCommandHelp($commandName);
-    return;
-}
-if ($argc > 3 && $argv[2] == '{help}') {
-    $commandHelper->createCommandDesc($commandName, $params);
+if ($argc == 2 && $argv[1] == '{help}') {
+    $commandHelper->showHelp();
     return;
 }
 if ($argc == 2) {
@@ -121,10 +117,3 @@ if ($argc == 2) {
 }
 
 $commandHelper->createCommand($commandName, $params);
-
-//$str = '{verbose,overwrite} [log_file=app.log] {unlimited} [methods={create,update,delete}] [paginate=50] {log}';
-//preg_match_all('/[\[].+?[\]]/', $str, $options);
-//preg_match_all('/[\{].+?[\}]/', $str, $arguments);
-//foreach ($arguments[0] as $oneArgument) {
-//	$allArguments = array_merge($allArguments, explode(',', trim($oneArgument, '{}')));
-//}
